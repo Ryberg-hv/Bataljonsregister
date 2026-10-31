@@ -1,7 +1,7 @@
 /* Service worker för Bataljonsregister.
    Höj VERSION vid varje ny uppladdning så att gamla filer rensas.
    Ändra samtidigt SW_CACHE_VERSION i index.html till samma värde. */
-const VERSION = 'bataljonsregister-v3';
+const VERSION = 'bataljonsregister-v4';
 const CORE = [
   './',
   './index.html',
