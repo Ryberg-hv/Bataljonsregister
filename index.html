@@ -54,7 +54,29 @@
   .bb-thin{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:4px;opacity:.55;}
   .bb-leg{font-size:11px;color:var(--ink-soft);display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;}
   .bb-leg span::before{content:"";display:inline-block;width:12px;height:8px;margin-right:5px;border-radius:2px;background:var(--c);}
+  .bb-full{display:block;color:#2E7D4F;font-size:11px;}
+  .gu-d{display:block;} .gu-m{display:none;}
+  .gu-cols{display:flex;gap:8px;align-items:flex-end;height:200px;border-bottom:1px solid #999;padding-top:16px;}
+  .gu-grp{flex:1;display:flex;justify-content:center;align-items:flex-end;height:100%;}
+  .gu-bars{display:flex;gap:4px;align-items:flex-end;height:100%;}
+  .gu-bw{position:relative;width:18px;height:100%;display:flex;align-items:flex-end;justify-content:center;}
+  .gu-ghost{position:absolute;bottom:0;left:0;width:18px;border-radius:3px 3px 0 0;}
+  .gu-bar{position:relative;display:block;width:11px;border-radius:3px 3px 0 0;}
+  .gu-big .gu-bar{width:13px;box-shadow:0 0 0 2px #14181B;}
+  .gu-n{position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:9px;white-space:nowrap;font-weight:400;color:var(--ink);}
+  .gu-names{display:flex;gap:8px;margin-top:6px;}
+  .gu-names div{flex:1;text-align:center;font-size:11px;line-height:1.2;overflow-wrap:anywhere;}
+  .gu-names small{display:block;color:var(--ink-soft);font-size:10px;}
+  .gu-tot{font-weight:700;}
+  .gu-u{margin:10px 0 14px;} .gu-h{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;}
+  .gu-h small{color:var(--ink-soft);font-size:11px;}
+  .gu-row{display:grid;grid-template-columns:34px 1fr 82px;gap:6px;align-items:center;margin:3px 0;font-size:11px;}
+  .gu-tr{position:relative;height:12px;background:#F1F3F5;border-radius:3px;}
+  .gu-mg{position:absolute;left:0;top:0;height:12px;border-radius:3px;}
+  .gu-mf{position:absolute;left:0;top:2px;height:8px;border-radius:2px;}
+  .gu-row.gu-big{font-weight:700;} .gu-row.gu-big .gu-tr{outline:2px solid #14181B;outline-offset:1px;}
   @media (max-width:640px){
+    .gu-d{display:none;} .gu-m{display:block;}
     .bb-r{grid-template-columns:1fr auto;grid-template-areas:"l v" "t t";gap:4px 10px;}
     .bb-l{grid-area:l;} .bb-v{grid-area:v;text-align:right;} .bb-t{grid-area:t;}
     .bb-none{grid-template-columns:1fr auto;}
@@ -4850,31 +4872,82 @@ function bbCard(title, sub, k, o){
   o = o || {};
   const keys = ['__tot'].concat(bsUnitKeys());
   let maxv = o.maxv;
-  if(k==='n'){ maxv = Math.max(10, ...bsUnitKeys().map(u=>{ const l = bsLatest(u); return l ? l.n : 0; })); }
   const rows = keys.map(sel=> (k==='n' && sel==='__tot')
       ? (()=>{ const l = bsSelList('__tot',false); const a = bsAgg(l); const bk = []; bsYears().forEach(ys=>{ const x = bsListFor('__tot',ys); if(x.length) bk.push({y:ys, v:bsAgg(x).n}); }); bk.sort((x,y)=>String(y.y).localeCompare(String(x.y)));
           const g = bsGoal('__tot','n');
           return `<div class="bb-big"><div class="bb-bignum">${a.n}</div><div><b>personer i bataljonen</b>${bk.length ? bbDelta(a.n-bk[0].v,'', bk[0].y) : ''}${g!=null ? `<br><span class="bb-sub">Mål ${g}${a.n>=g?' – nått':' – '+(g-a.n)+' kvar'}</span>`:''}</div></div>`; })()
       : bbRow(sel, sel==='__tot' ? 'Bataljonen' : bsUnitName(sel), k, {maxv}));
+  if(k==='n'){ const bigBlock = rows[0]; const nrows = keys.map(sel=>bbRowN(sel, sel==='__tot' ? 'Bataljonen' : bsUnitName(sel))); return `<div class="panel bb-card"><h3>${esc(title)}</h3><p class="bb-desc">${esc(sub)}</p>${bigBlock}${nrows.join('')}</div>`; }
   return `<div class="panel bb-card"><h3>${esc(title)}</h3><p class="bb-desc">${esc(sub)}</p>${rows.join('')}</div>`;
+}
+const BS_ROWS_DEF = {'kompani:451':216,'kompani:452':216,'kompani:453':216,'kompani:454':216,ledning:31,musikkar:58,flygg:5};
+function bsRows(k){ const b = ensureBstat(); const v = b.rows && b.rows[k]; return (v!=null && v>0) ? Number(v) : (BS_ROWS_DEF[k]||0); }
+function bsSetRows(k, v){ const b = ensureBstat(); if(!b.rows) b.rows = {}; const n = parseInt(v,10); if(n>0) b.rows[k] = n; else delete b.rows[k]; saveToDisk(); renderAll(); }
+function bsRowsOf(sel, keys){ return sel==='__tot' ? keys.reduce((s0,k)=>s0+bsRows(k),0) : bsRows(sel); }
+function bbYearLegend(){
+  const ys = bsYears();
+  if(!ys.length) return '<span style="--c:#A9BEDB">31 dec (kommer första gången appen öppnas efter nyår)</span>';
+  return ys.map((y,i)=>`<span style="--c:${BB_BACK[i]}">31 dec ${esc(y)}</span>`).join('');
+}
+function bbRowN(sel, label){
+  const list = bsSelList(sel,false);
+  if(!list.length) return `<div class="bb-r bb-none"><div class="bb-l">${esc(label)}</div><div class="bb-v">ingen statistik inläst</div></div>`;
+  const keys = sel==='__tot' ? bsUnitKeys().filter(k=>bsLatest(k)) : [sel];
+  const a = bsAgg(list); const rows = bsRowsOf(sel, keys);
+  const placed = a.n - a.res;
+  if(!rows) return `<div class="bb-r"><div class="bb-l">${esc(label)}</div><div class="bb-t"></div><div class="bb-v">${a.n} personer<small>antal rader okänt</small></div></div>`;
+  const pct = placed/rows*100; const full = placed>=rows;
+  const backs = [];
+  bsYears().forEach(ys=>{ const l = bsListFor(sel, ys); if(l.length){ const ag = bsAgg(l); const ks = sel==='__tot' ? Object.keys(ensureBstat().ye[ys]) : [sel]; const rw = bsRowsOf(sel, ks); if(rw) backs.push({y:ys, v:(ag.n-ag.res)/rw*100}); } });
+  backs.sort((x,y)=>String(y.y).localeCompare(String(x.y)));
+  const backHtml = backs.slice(0,4).map((b2,i)=>({b2,i})).reverse().map(({b2,i})=>`<b class="bb-back" title="31 dec ${esc(b2.y)}: ${bbFmt(b2.v)} % av raderna fyllda" style="width:${Math.min(100,b2.v)}%;background:${BB_BACK[i]}"></b>`).join('');
+  let stale = '';
+  if(sel==='__tot') stale = ` <span class="bb-sub">${list.length} av ${bsUnitKeys().length} enheter</span>`;
+  else { const l = bsLatest(sel); if(l && bsDaysOld(l.d)>60) stale = ` <span class="bb-old">inläst ${esc(l.d)}</span>`; }
+  const txt = `${placed} av ${rows} rader fyllda <span class="bb-sub">(${bbFmt(pct)} %)</span>${full ? '<b class="bb-full">Fullt bemannad</b>' : ''}<small>${a.n} personer, ${a.res} i personalreserv</small>`;
+  const delta = backs.length ? bbDelta(pct-backs[0].v,'%',backs[0].y) : '';
+  return `<div class="bb-r ${sel==='__tot'?'bb-tot':''}"><div class="bb-l">${esc(label)}${stale}</div><div class="bb-t">${backHtml}<b class="bb-front" style="width:${Math.min(100,pct)}%;background:${full?'#2E7D4F':'#0A5AA8'}"></b></div><div class="bb-v">${txt}${delta}</div></div>`;
+}
+function bbGuShares(sel, ys){
+  const l = ys ? bsListFor(sel, ys) : bsSelList(sel,false);
+  if(!l.length) return null;
+  const g = bsAgg(l).gu; const t = g.gu+g.fmu+g.guf+g.saknar;
+  return {g, t, sh:{gu:t?g.gu/t:0, fmu:t?g.fmu/t:0, guf:t?g.guf/t:0}};
 }
 function bbGuCard(){
   const keys = ['__tot'].concat(bsUnitKeys());
-  const COL = {gu:'#0A5AA8', fmu:'#2A9D8F', guf:'#E9A23B', saknar:'#B8BEC4'};
-  const seg = (g,t)=>['gu','fmu','guf','saknar'].map(x=>`<b class="bb-seg" style="width:${t?g[x]/t*100:0}%;background:${COL[x]}"></b>`).join('');
-  const rows = keys.map(sel=>{
-    const list = bsSelList(sel,false); const label = sel==='__tot' ? 'Bataljonen' : bsUnitName(sel);
-    if(!list.length) return `<div class="bb-r bb-none"><div class="bb-l">${esc(label)}</div><div class="bb-v">ingen statistik inläst</div></div>`;
-    const a = bsAgg(list); const g = a.gu; const t = g.gu+g.fmu+g.guf+g.saknar;
-    const big = ['gu','fmu','guf'].sort((x,y)=>g[y]-g[x])[0];
-    const nm = {gu:'GU', fmu:'FMU', guf:'GUF', saknar:'Saknar'};
-    const parts = ['gu','fmu','guf','saknar'].map(x=> x===big ? `<b>${nm[x]} ${g[x]}</b>` : `${nm[x]} ${g[x]}`).join(' · ');
-    const ys = bsYears()[0]; let old = '';
-    if(ys){ const l = bsListFor(sel, ys); if(l.length){ const og = bsAgg(l).gu; const ot = og.gu+og.fmu+og.guf+og.saknar; old = `<div class="bb-thin" title="31 dec ${esc(ys)}">${seg(og,ot)}</div>`; } }
-    return `<div class="bb-r ${sel==='__tot'?'bb-tot':''}"><div class="bb-l">${esc(label)}</div><div class="bb-t bb-stack"><div class="bb-stk">${seg(g,t)}</div>${old}</div><div class="bb-v">${parts}</div></div>`;
+  const COL = {gu:'#0A5AA8', fmu:'#2A9D8F', guf:'#E9A23B'}; const NM = {gu:'GU', fmu:'FMU', guf:'FMU'}; NM.guf='GUF';
+  const ys = bsYears();
+  const data = keys.map(sel=>({sel, label: sel==='__tot'?'Bataljonen':bsUnitName(sel), cur:bbGuShares(sel), old: ys.map(y=>({y, d:bbGuShares(sel,y)}))}));
+  let mx = 0.1; data.forEach(d=>{ if(d.cur) ['gu','fmu','guf'].forEach(x=>{ mx = Math.max(mx, d.cur.sh[x]); d.old.forEach(o=>{ if(o.d) mx = Math.max(mx, o.d.sh[x]); }); }); });
+  mx = Math.ceil(mx*10)/10;
+  const types = ['gu','fmu','guf'];
+  const bigOf = d=>{ let b2=null, v=-1; types.forEach(x=>{ if(d.cur.g[x]>v){ v=d.cur.g[x]; b2=x; } }); return v>0 ? b2 : null; };
+  /* dator: lodräta grupper */
+  const cols = data.map(d=>{
+    if(!d.cur) return `<div class="gu-grp gu-none"><div class="gu-bars"></div></div>`;
+    const big = bigOf(d);
+    const bars = types.map(x=>{
+      const ghosts = d.old.map((o,i)=>({o,i})).filter(z=>z.o.d).reverse().map(({o,i})=>`<b class="gu-ghost" title="31 dec ${esc(o.y)}: ${bbFmt(o.d.sh[x]*100)} %" style="height:${o.d.sh[x]/mx*100}%;background:${BB_BACK[i]}"></b>`).join('');
+      return `<div class="gu-bw${x===big?' gu-big':''}">${ghosts}<b class="gu-bar" title="${NM[x]}: ${d.cur.g[x]} personer" style="height:${d.cur.sh[x]/mx*100}%;background:${COL[x]}"><span class="gu-n">${bbFmt(d.cur.sh[x]*100)}%</span></b></div>`;
+    }).join('');
+    return `<div class="gu-grp"><div class="gu-bars">${bars}</div></div>`;
   }).join('');
-  return `<div class="panel bb-card"><h3>Grundutbildning</h3><p class="bb-desc">Hur personalen fördelar sig. Den största utbildningen är markerad med fet stil.${bsYears()[0] ? ' Den smala stapeln under är 31 december '+esc(bsYears()[0])+'.' : ''}</p>${rows}
-    <div class="bb-leg"><span style="--c:${COL.gu}">GU</span><span style="--c:${COL.fmu}">FMU</span><span style="--c:${COL.guf}">GUF</span><span style="--c:${COL.saknar}">Saknar grundutbildning</span></div></div>`;
+  const names = data.map(d=>`<div class="${d.sel==='__tot'?'gu-tot':''}">${esc(d.label)}<small>${d.cur?'saknar '+d.cur.g.saknar:'ingen statistik'}</small></div>`).join('');
+  /* telefon: tre liggande staplar per enhet */
+  const mob = data.map(d=>{
+    if(!d.cur) return `<div class="gu-u bb-none"><div class="gu-h"><b>${esc(d.label)}</b><small>ingen statistik inläst</small></div></div>`;
+    const big = bigOf(d);
+    const rows = types.map(x=>{
+      const ghosts = d.old.map((o,i)=>({o,i})).filter(z=>z.o.d).reverse().map(({o,i})=>`<b class="gu-mg" title="31 dec ${esc(o.y)}: ${bbFmt(o.d.sh[x]*100)} %" style="width:${o.d.sh[x]/mx*100}%;background:${BB_BACK[i]}"></b>`).join('');
+      return `<div class="gu-row${x===big?' gu-big':''}"><div>${NM[x]}</div><div class="gu-tr">${ghosts}<b class="gu-mf" style="width:${d.cur.sh[x]/mx*100}%;background:${COL[x]}"></b></div><div>${bbFmt(d.cur.sh[x]*100)} % (${d.cur.g[x]})</div></div>`;
+    }).join('');
+    return `<div class="gu-u"><div class="gu-h"><b>${esc(d.label)}</b><small>saknar grundutbildning: ${d.cur.g.saknar}</small></div>${rows}</div>`;
+  }).join('');
+  const leg = `<div class="bb-leg">${types.map(x=>`<span style="--c:${COL[x]}">${NM[x]}</span>`).join('')}${bbYearLegend()}</div>`;
+  return `<div class="panel bb-card"><h3>Grundutbildning</h3><p class="bb-desc">Andel av personalen per utbildning. Den vanligaste har svart ram. Ljusare staplar bakom visar läget 31 december${ys.length?' (senaste '+ys.length+' år)':''}. Personal som saknar grundutbildning redovisas i text.</p>
+    <div class="gu-d"><div class="gu-cols">${cols}</div><div class="gu-names">${names}</div></div>
+    <div class="gu-m">${mob}</div>${leg}</div>`;
 }
 function bbGoalPanel(sel){
   const keys = bsUnitKeys();
@@ -4887,7 +4960,8 @@ function bbGoalPanel(sel){
   return `<div class="panel bb-card"><details><summary style="cursor:pointer;font-weight:700;">Sätt mål</summary>
     <div style="margin:12px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><span>Mål för</span>${picker}</div>
     <table class="full stats" style="min-width:0;"><thead><tr><th>Nyckeltal</th><th>Mål</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="bb-sub" style="margin-top:8px;">Målen sparas bara i det här registret. Har en enhet inget eget mål används bataljonens mål för färgen på dess stapel. Personalreserven färgas inte.</p></details></div>`;
+    <h4 style="margin:16px 0 6px;font-size:14px;">Antal rader per enhet</h4><table class="full stats" style="min-width:0;"><thead><tr><th>Enhet</th><th>Rader</th></tr></thead><tbody>${keys.map(k=>`<tr><td>${esc(bsUnitName(k))}</td><td><input type="number" min="1" value="${bsRows(k)||''}" onchange="bsSetRows('${k}', this.value)"></td></tr>`).join('')}</tbody></table>
+    <p class="bb-sub" style="margin-top:8px;">Raderna används för fyllnadsgraden under Antal personal. Förvalt är mallarna i enheternas appar (kompani 216, Ledningspluton 31, Musikkår 58, Flyggrupp 5). Målen sparas bara i det här registret. Har en enhet inget eget mål används bataljonens mål för färgen på dess stapel. Personalreserven färgas inte.</p></details></div>`;
 }
 function renderBatStats(){
   const sel = (view && view.sel) || '__tot';
@@ -4901,12 +4975,13 @@ function renderBatStats(){
       <div class="actions"><button class="btn primary" onclick="openStatImportModal()">Läs in statistik</button></div>
     </div>
     <div class="panel bb-card bb-help">
-      <div class="bb-leg" style="margin:0 0 6px;"><span style="--c:#0A5AA8">Nuläge (färgad stapel)</span><span style="--c:#A9BEDB">31 december (ljus stapel bakom)</span><span style="--c:#14181B;width:auto">Streck = mål</span></div>
+      <div class="bb-leg" style="margin:0 0 6px;"><span style="--c:#0A5AA8">Nuläge (färgad stapel)</span><span style="--c:#14181B;width:auto">Streck = mål</span></div>
+      <div class="bb-leg" style="margin:0 0 6px;">${bbYearLegend()}</div>
       <div class="bb-leg" style="margin:0;"><span style="--c:#2E7D4F">Mål nått</span><span style="--c:#C28A00">Nära målet</span><span style="--c:#B3392F">Långt kvar</span></div>
       <p class="bb-sub" style="margin-top:8px;">${ys.length ? 'Jämförelsebilder finns för 31 december '+ys.slice().reverse().join(', ')+'. Ju äldre år, desto blekare stapel.' : 'Jämförelsen mot 31 december kommer när appen öppnas första gången efter nyår (årsskiftet '+cy+'/'+(cy+1)+').'}${ys.length?'':' Tills dess visas avtal mot föregående år.'}</p>
     </div>
-    ${bbCard('Antal personal','Personal i enhetens grupper utom Ny personal och Avveckling. Personalreserven ingår.','n',{})}
-    ${bbCard('Avtalsuppfyllnad','Andel av personalen som gjort sina avtalsövningar i år. Varje enhet räknas efter sin egen regel (4 eller 8 avtalsdygn). Ljus stapel: hela föregående år.','avt1',{})}
+    ${bbCard('Antal personal','Stapeln visar hur stor del av enhetens rader som har en person. Full stapel betyder fullt bemannad. Personalreserven räknas inte som fylld rad. Antal rader per enhet kan ändras under Sätt mål.','n',{})}
+    ${bbCard('Avtalsuppfyllnad','Andel av personalen som gjort sina avtalsövningar i år. Varje enhet räknas efter sin egen regel (4 eller 8 avtalsdygn). Ljus stapel: hela '+(new Date().getFullYear()-1)+'.','avt1',{})}
     ${bbCard('Giltigt skyddsvaktsbevis','Andel av personalen med kompetensen Skyddsvaktsbevis som inte har gått ut.','sv',{})}
     ${bbCard('Personalreserv','Andel av personalen som står i personalreserven.','res',{maxv:30})}
     ${bbGuCard()}
@@ -8754,6 +8829,11 @@ async function authCreateOwner(){
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', authBoot); else authBoot();
 
 const APP_CHANGELOG = [
+  {version:'2026-10-31.2', title:'Tydligare staplar', items:[
+    'Grundutbildning visas som tre separata staplar (GU, FMU, GUF) per enhet, med den vanligaste markerad.',
+    'Antal personal visar hur fylld enheten är: full stapel när alla rader har en person. Antal rader per enhet kan ändras under Sätt mål.',
+    'Jämförelsen mot 31 december visar alltid vilket år den gäller, med egen färg per år.'
+  ]},
   {version:'2026-10-31', title:'Bataljonsstatistik som staplar', items:[
     'Bataljonsstatistiken visas nu som färgade staplar per nyckeltal, med bataljonen överst och varje enhet under.',
     'Appen sparar en bild av läget 31 december (första öppnandet efter nyår) och visar högst fyra år som ljusare staplar bakom nuläget. Äldre bilder raderas.',
@@ -8779,7 +8859,7 @@ const APP_CHANGELOG = [
 ];
 const APP_VERSION = APP_CHANGELOG[0].version;
 /* Måste vara samma som VERSION i sw.js. */
-const SW_CACHE_VERSION = 'bataljonsregister-v4';
+const SW_CACHE_VERSION = 'bataljonsregister-v5';
 const LS_SEEN_VERSION = 'bataljonsregister_seen_version';
 var appWasInstalledBefore; // sätts i init(), som körs före den här raden
 function maybeShowWhatsNew(){
