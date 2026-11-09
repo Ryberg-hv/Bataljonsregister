@@ -4017,7 +4017,7 @@ function openPersonForm(gid, pid, slotIndex){
       </div>
       <div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">Blåbandare utan grundutbildning kan endast ha graden Menig och visas med blå text. FMU: efter ${GRUNDUTB_KRAV} genomförda avtalsövningar (${exSlash()}) markeras kompetensen FMU automatiskt. Specialist: personen är blåbandare tills kompetensen GUF markeras. Medan personen är blåbandare går det inte att markera grundutbildning på annat sätt.${existing && p.underUtbildning && traineeType(p)==='fmu' ? ` Genomförda hittills: <strong>${Math.min(exerciseCount(p),GRUNDUTB_KRAV)}/${GRUNDUTB_KRAV}</strong>.` : ''}</div>
     </div>`;
-  const vilandeHtml = (g.kind==='offboarding' || g.kind==='reserve' || g.name==='Personalreserv') ? `<div style="margin:0 0 14px;padding:10px 12px;border:1px solid #E3C766;background:#FFF9E0;border-radius:var(--radius);">
+  const vilandeHtml = (g.kind==='offboarding' || g.kind==='reserve' || g.kind==='recruit' || g.name==='Personalreserv') ? `<div style="margin:0 0 14px;padding:10px 12px;border:1px solid #E3C766;background:#FFF9E0;border-radius:var(--radius);">
       <label style="display:flex;align-items:center;gap:8px;font-weight:600;color:#7A5C00;"><input type="checkbox" id="pf_vilande" style="width:16px;height:16px;margin:0;accent-color:#A67C00;" ${p.vilande?'checked':''}> Vilande (paus från operativ tjänst)</label>
       <div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">Vilande personer avslutas inte. De visas med gul text, räknas inte i någon statistik och går inte att radera eller flytta förrän markeringen tagits bort. Efter tolv månader kommer en notis om avrustning.</div>
     </div>` : '';
@@ -8660,6 +8660,19 @@ async function authFetchList(co){
     return j;
   }catch(e){ return null; } finally{ clearTimeout(t); }
 }
+
+/* LICENS_V1: licenslistan (Ryberg-hv/Licens, licenser.json) skrivs bara av utfärdaren. Saknas listan (inte uppsatt än) hindras ingen. */
+const LIC_URL='https://raw.githubusercontent.com/Ryberg-hv/Licens/main/licenser.json';
+const LIC_NIVA = APP_KEY==='bataljon' ? 'bataljon' : 'kompani';
+async function licFetch(){
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),8000);
+  try{ const r=await fetch(LIC_URL+'?t='+Date.now(),{cache:'no-store',signal:ctl.signal}); if(!r.ok) return null; const j=await r.json(); if(!j||j.v!==1||!Array.isArray(j.lic)) return null; return j; }
+  catch(e){ return null; } finally{ clearTimeout(t); }
+}
+function licOk(list,co){ co=authNorm(co); return !list || list.lic.some(l=>authNorm(l.co)===co && l.niva===LIC_NIVA); }
+function authShowNoLic(){
+  authGate('<h2 style="margin:0 0 10px;">Licens saknas</h2><p style="font-size:14px;">Den här enheten saknar giltig licens. Ingen data är raderad. Kontakta din chef.</p><button class="btn" onclick="authRetry()">Kontrollera igen</button><div id="authMsg" style="min-height:18px;font-size:13px;color:#8C3B32;margin-top:8px;"></div>','nolic');
+}
 /* ok | revoked | level | offline | untrusted | none */
 async function authCheck(){
   const rec = authRec(); if(!rec) return 'none';
@@ -8670,6 +8683,7 @@ async function authCheck(){
   if(missing>AUTH_MAX_REVOKE) return 'untrusted';
   const mine = list.keys.find(k=>k.h===rec.h);
   if(!mine) return 'revoked';
+  const LL = await licFetch(); if(!licOk(LL, rec.co||authCo())) return 'nolic';
   rec.lastOk = Date.now(); rec.id = mine.id; rec.lvl = mine.lvl; rec.seen = list.keys.map(k=>k.id).slice(0,500);
   authSave(rec);
   return AUTH_NEED.includes(mine.lvl) ? 'ok' : 'level';
@@ -8710,6 +8724,7 @@ async function authRetry(){
   const r = await authCheck();
   if(r==='ok'){ authGateClose(); }
   else if(r==='revoked'){ await authWipe(); authShowRevoked(); }
+  else if(r==='nolic'){ authShowNoLic(); }
   else if(r==='level'){ authShowLevel(); }
   else if(m) m.textContent = 'Kunde inte kontrollera just nu. Kontrollera uppkopplingen.';
 }
@@ -8736,6 +8751,7 @@ async function authActivate(){
     const mine = list.keys.find(k=>k.h===h);
     if(!mine){ m.textContent = 'Nyckeln finns inte på listan.'; return; }
     if(!AUTH_NEED.includes(mine.lvl)){ m.textContent = 'Nyckeln gäller inte för den här appen (nivå '+(AUTH_LVL_LABEL[mine.lvl]||mine.lvl)+').'; return; }
+    const LL = await licFetch(); if(!licOk(LL, parts.co)){ m.textContent = 'Den här kompanikoden saknar licens. Kontakta din chef.'; return; }
     authSave({h, id:mine.id, lvl:mine.lvl, co:parts.co, lastOk:Date.now(), seen:list.keys.map(k=>k.id).slice(0,500)});
     authGateClose();
     try{ renderAll(); }catch(e){}
@@ -8744,8 +8760,9 @@ async function authActivate(){
 async function authRunCheck(){
   const r = await authCheck();
   if(r==='revoked'){ await authWipe(); authShowRevoked(); }
+  else if(r==='nolic'){ authShowNoLic(); }
   else if(r==='level'){ authShowLevel(); }
-  else if(r==='ok'){ const g = document.getElementById('authGate'); if(g && g.dataset.kind==='locked') authGateClose(); try{ NOTICES_CACHE && 0; }catch(e){} }
+  else if(r==='ok'){ const g = document.getElementById('authGate'); if(g && (g.dataset.kind==='locked'||g.dataset.kind==='nolic')) authGateClose(); try{ NOTICES_CACHE && 0; }catch(e){} }
   else {
     const rec = authRec();
     if(rec && (Date.now()-(rec.lastOk||0))/86400000 > AUTH_GRACE_DAYS && !document.getElementById('authGate')) authShowLocked();
@@ -9166,34 +9183,8 @@ function openCodeGen(){
 }
 let CG_CODE = '';
 function cgNew(){ CG_CODE = genCode10(); const o = document.getElementById('cgOut'); if(o) o.textContent = CG_CODE; const c = document.getElementById('cgCopy'); if(c) c.textContent = 'Kopiera'; }
-/* första uppstarten: tom lista -> skapa ägarnyckel */
-async function authBootOwnerUi(){
-  const box = document.getElementById('authBoot'); if(!box) return;
-  box.innerHTML = '<hr style="margin:16px 0;border:none;border-top:1px solid #ccc;"><h3 style="margin:0 0 6px;">Första uppstarten</h3><p style="font-size:13px;color:#454B4F;margin:0 0 8px;">Bara för dig som är första användare i bataljonen (listan måste vara tom). Ange kompanikod, GitHub-token och dess sista giltighetsdag. Repot Behorighet&lt;kompanikod&gt; måste finnas och vara publikt.</p>'
-    +'<input id="authCo" type="text" maxlength="3" autocomplete="off" autocapitalize="characters" placeholder="Bataljonskod (2 tecken)" style="width:100%;box-sizing:border-box;padding:10px;font-size:15px;border:1px solid #888;border-radius:8px;margin-bottom:8px;">'
-    +'<input id="authTok" type="password" autocomplete="off" placeholder="GitHub-token" style="width:100%;box-sizing:border-box;padding:10px;font-size:15px;border:1px solid #888;border-radius:8px;">'
-    +'<label style="display:block;font-size:12px;margin-top:8px;">Token giltig till <input id="authTokExp" type="date" min="'+behYmd(0)+'" max="'+behYmd(90)+'" value="'+behYmd(90)+'" style="padding:6px;font-size:14px;"></label>'
-    +'<button class="btn" style="margin-top:8px;" onclick="authCreateOwner()">Skapa ägarnyckel</button><div id="authOwnerOut"></div>';
-}
-async function authCreateOwner(){
-  const tok = (document.getElementById('authTok').value||'').trim(); const out = document.getElementById('authOwnerOut'); const m = document.getElementById('authMsg');
-  const co = authNorm(document.getElementById('authCo').value); const exp = document.getElementById('authTokExp').value;
-  if(!/^[A-Z0-9]{2,3}$/.test(co)){ m.textContent = 'Ange bataljonskoden (två tecken).'; return; }
-  if(!tok){ m.textContent = 'Lägg in token.'; return; }
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(exp) || exp<behYmd(0) || exp>behYmd(90)){ m.textContent = 'Sista giltighetsdag måste ligga inom 90 dagar fram.'; return; }
-  m.textContent = 'Skapar…';
-  try{
-    const key = authGen(), h = await authHash(key), id = authMakeId('bataljon', h);
-    const rem = await behFetchRemote(tok, co);
-    if(rem.list.keys.length){ m.textContent = 'Nyckelkortet finns redan. Ange din nyckel högst upp. Är du kompaniet lägger du in din token under Behörigheter → Token… efter att du kommit in.'; return; }
-    await behPut(tok, rem.sha, {v:1, updated:Date.now(), keys:[{id, h, lvl:'bataljon'}]}, co);
-    AUTH_PENDING_TOKEN = tok;
-    try{ localStorage.setItem('bataljonsregister_ghtoken_exp_pending', exp); localStorage.setItem('bataljonsregister_beh_pending', JSON.stringify({users:[{id, namn:'Ägare', lvl:'bataljon', h, created:Date.now(), revoked:false}]})); }catch(e){}
-    authSave({h, id, lvl:'bataljon', co, lastOk:Date.now(), seen:[id]});
-    m.textContent = '';
-    out.innerHTML = '<p style="font-size:13px;margin:10px 0 4px;"><strong>Din ägarnyckel (visas bara nu – skriv ned den):</strong></p><div style="font-family:monospace;font-size:18px;letter-spacing:1px;padding:10px;border:1px solid #888;border-radius:8px;text-align:center;user-select:all;word-break:break-all;">'+co+'-'+key+'</div><button class="btn primary" style="margin-top:10px;" onclick="authGateClose();try{renderAll()}catch(e){}">Fortsätt</button>';
-  }catch(e){ m.textContent = 'Kunde inte skapa: '+(e.message||e); }
-}
+/* LICENS_V1: ägarnyckel skapas inte längre i appen. Första nyckeln utfärdas med licensverktyget. */
+function authBootOwnerUi(){ const box=document.getElementById('authBoot'); if(box) box.innerHTML='<p style="font-size:12px;color:#777;margin:14px 0 0;">Saknar du nyckel? Kontakta din chef. Nya kompanier och bataljoner kräver licens.</p>'; }
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', authBoot); else authBoot();
 
@@ -9240,7 +9231,7 @@ const APP_CHANGELOG = [
 ];
 const APP_VERSION = APP_CHANGELOG[0].version;
 /* Måste vara samma som VERSION i sw.js. */
-const SW_CACHE_VERSION = 'bataljonsregister-v14';
+const SW_CACHE_VERSION = 'bataljonsregister-v15';
 const LS_SEEN_VERSION = 'bataljonsregister_seen_version';
 var appWasInstalledBefore; // sätts i init(), som körs före den här raden
 /* WHATSNEW: rutan "Nytt i den här versionen" är påslagen igen (WHATSNEW_ON). */
